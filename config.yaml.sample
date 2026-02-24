@@ -20,7 +20,7 @@ sls:
   access_key_secret: ""
   security_token: ""
   # SLS 项目名称
-  project: "nas-1578441730305797-cn-shanghai"
+  project: "prometheus-test"
   # SLS 时序库名称
   logstore: "prometheus"
 
