@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLS Proxy Health Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        header p {
+            color: #94a3b8;
+            margin-top: 10px;
+            font-size: 1.1rem;
+        }
+
+        .status-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-healthy {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .status-unhealthy {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .status-loading {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .connection-indicator {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .connection-indicator.connected {
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+        }
+
+        .connection-indicator.disconnected {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
+        }
+
+        .connection-indicator svg {
+            width: 30px;
+            height: 30px;
+            fill: white;
+        }
+
+        .connection-info h3 {
+            font-size: 1.3rem;
+            margin-bottom: 5px;
+        }
+
+        .connection-info p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .metric-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .metric-label {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .sample-card {
+            margin-top: 20px;
+        }
+
+        .sample-card .card-title {
+            margin-bottom: 20px;
+        }
+
+        .sample-data {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            overflow-x: auto;
+        }
+
+        .sample-key {
+            color: #7c3aed;
+        }
+
+        .sample-value {
+            color: #10b981;
+        }
+
+        .sample-timestamp {
+            color: #f59e0b;
+        }
+
+        .labels-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .labels-title {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+        }
+
+        .label-tag {
+            display: inline-block;
+            background: rgba(124, 58, 237, 0.2);
+            color: #a78bfa;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin: 3px;
+            font-size: 0.8rem;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 20px;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            color: #94a3b8;
+        }
+
+        .auto-refresh input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        .no-data svg {
+            width: 60px;
+            height: 60px;
+            fill: #64748b;
+            margin-bottom: 15px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 1.5s infinite;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 SLS Proxy Health Monitor</h1>
+            <p>Prometheus Remote Read SLS Proxy - Health & Connectivity Check</p>
+        </header>
+
+        <div class="status-cards">
+            <!-- Health Check Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">🔍 连接状态</span>
+                    <span id="health-status" class="status-badge status-loading">检查中</span>
+                </div>
+
+                <div class="connection-status">
+                    <div id="connection-indicator" class="connection-indicator loading">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                    </div>
+                    <div class="connection-info">
+                        <h3 id="connection-title">检查中...</h3>
+                        <p id="connection-desc">正在验证 SLS 连通性</p>
+                    </div>
+                </div>
+
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-label">响应时间</div>
+                        <div class="metric-value" id="response-time">--</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">项目</div>
+                        <div class="metric-value" id="project-name">--</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">日志库</div>
+                        <div class="metric-value" id="logstore-name">--</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">检查时间</div>
+                        <div class="metric-value" id="check-time">--</div>
+                    </div>
+                </div>
+
+                <div id="error-container"></div>
+
+                <button class="refresh-btn" onclick="checkHealth()" id="refresh-btn">
+                    🔄 刷新状态
+                </button>
+
+                <div class="auto-refresh">
+                    <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()">
+                    <label for="auto-refresh">自动刷新 (每 30 秒)</label>
+                </div>
+            </div>
+
+            <!-- Latest Sample Card -->
+            <div class="card sample-card">
+                <div class="card-header">
+                    <span class="card-title">📊 最新样本数据</span>
+                    <span id="sample-status" class="status-badge status-loading">获取中</span>
+                </div>
+
+                <div id="sample-content">
+                    <div class="no-data">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                        </svg>
+                        <p>正在获取最新样本数据...</p>
+                    </div>
+                </div>
+
+                <button class="refresh-btn" onclick="getLatestSample()" id="sample-refresh-btn">
+                    🔄 获取最新数据
+                </button>
+            </div>
+        </div>
+
+        <footer>
+            <p>Prometheus Remote Read SLS Proxy v0.1.0</p>
+        </footer>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+
+        // Check health on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkHealth();
+            getLatestSample();
+        });
+
+        async function checkHealth() {
+            const btn = document.getElementById('refresh-btn');
+            btn.disabled = true;
+            btn.textContent = '检查中...';
+
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+
+                // Update status badge
+                const statusBadge = document.getElementById('health-status');
+                const indicator = document.getElementById('connection-indicator');
+                const title = document.getElementById('connection-title');
+                const desc = document.getElementById('connection-desc');
+
+                if (data.status === 'healthy' && data.sls.connected) {
+                    statusBadge.className = 'status-badge status-healthy';
+                    statusBadge.textContent = '健康';
+
+                    indicator.className = 'connection-indicator connected';
+                    indicator.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+
+                    title.textContent = '✓ 连接正常';
+                    desc.textContent = 'SLS 服务可达';
+
+                    document.getElementById('error-container').innerHTML = '';
+                } else {
+                    statusBadge.className = 'status-badge status-unhealthy';
+                    statusBadge.textContent = '异常';
+
+                    indicator.className = 'connection-indicator disconnected';
+                    indicator.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>';
+
+                    title.textContent = '✗ 连接失败';
+                    desc.textContent = data.sls.error || '未知错误';
+
+                    if (data.sls.error) {
+                        document.getElementById('error-container').innerHTML =
+                            `<div class="error-message">错误信息: ${data.sls.error}</div>`;
+                    }
+                }
+
+                // Update metrics
+                document.getElementById('response-time').textContent =
+                    data.sls.response_time ? `${data.sls.response_time}ms` : '--';
+                document.getElementById('project-name').textContent =
+                    data.sls.project || '--';
+                document.getElementById('logstore-name').textContent =
+                    data.sls.logstore || '--';
+                document.getElementById('check-time').textContent =
+                    data.timestamp ? new Date(data.timestamp).toLocaleString('zh-CN') : '--';
+
+            } catch (error) {
+                console.error('Health check failed:', error);
+                document.getElementById('connection-title').textContent = '请求失败';
+                document.getElementById('connection-desc').textContent = error.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 刷新状态';
+            }
+        }
+
+        async function getLatestSample() {
+            const btn = document.getElementById('sample-refresh-btn');
+            const statusBadge = document.getElementById('sample-status');
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/health/latest');
+                const data = await response.json();
+                const content = document.getElementById('sample-content');
+
+                if (data.status === 'success' && data.sample) {
+                    statusBadge.className = 'status-badge status-healthy';
+                    statusBadge.textContent = '有数据';
+
+                    const sample = data.sample;
+                    const labels = Object.entries(sample.labels || {})
+                        .map(([k, v]) => `<span class="label-tag">${k}=${v}</span>`)
+                        .join('');
+
+                    content.innerHTML = `
+                        <div class="sample-data">
+                            <div><span class="sample-key">指标名称</span>: <span class="sample-value">${sample.metric_name || 'N/A'}</span></div>
+                            <div><span class="sample-key">数据总数</span>: <span class="sample-value">${data.total_count || 0}</span></div>
+                            <div><span class="sample-key">时间</span>: <span class="sample-timestamp">${sample.timestamp ? new Date(sample.timestamp).toLocaleString('zh-CN') : 'N/A'}</span></div>
+                            <div class="labels-section">
+                                <div class="labels-title">标签:</div>
+                                ${labels || '<span style="color: #64748b;">无标签</span>'}
+                            </div>
+                        </div>
+                    `;
+                } else if (data.status === 'no_data') {
+                    statusBadge.className = 'status-badge status-unhealthy';
+                    statusBadge.textContent = '无数据';
+
+                    content.innerHTML = `
+                        <div class="no-data">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                            </svg>
+                            <p>${data.message || '未找到样本数据'}</p>
+                        </div>
+                    `;
+                } else {
+                    statusBadge.className = 'status-badge status-unhealthy';
+                    statusBadge.textContent = '错误';
+
+                    content.innerHTML = `
+                        <div class="error-message">${data.message || '获取数据失败'}</div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to get latest sample:', error);
+                document.getElementById('sample-content').innerHTML = `
+                    <div class="error-message">请求失败: ${error.message}</div>
+                `;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('auto-refresh');
+
+            if (checkbox.checked) {
+                checkHealth();
+                getLatestSample();
+
+                autoRefreshInterval = setInterval(() => {
+                    checkHealth();
+                    getLatestSample();
+                }, 30000);
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

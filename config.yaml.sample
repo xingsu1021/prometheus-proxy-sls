@@ -1,0 +1,56 @@
+# Prometheus Remote Read SLS Proxy 配置
+
+#grafana可以配置代理地址或者sls地址，
+#sls配置https://{project}.{sls-endpoint}/prometheus/{project}/{metricstore}，文档https://help.aliyun.com/zh/sls/send-time-series-data-from-log-service-to-grafana?spm=a2c4g.11186623.0.0.e4f917f2kpFXzP#task-2539803
+
+# 服务器配置
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 300s
+  write_timeout: 300s
+  idle_timeout: 120s  # 空闲连接超时，防止长时间无请求后连接断开
+
+# SLS 配置
+sls:
+  endpoint: "cn-shanghai.log.aliyuncs.com"
+  #内网
+  #endpoint: "cn-shanghai-intranet.log.aliyuncs.com"
+  access_key_id: ""
+  access_key_secret: ""
+  security_token: ""
+  # SLS 项目名称
+  project: "nas-1578441730305797-cn-shanghai"
+  # SLS 时序库名称
+  logstore: "prometheus"
+
+# Prometheus Remote Read 配置
+remote_read:
+  # 最大并发请求数
+  concurrent_requests: 5
+  # 每个 SLS 查询的超时时间
+  query_timeout: 120s
+  # 允许部分响应
+  partial_response: false
+  # 每个响应的最大采样点数
+  max_samples: 1000000
+
+# TLS 配置 (可选)
+tls:
+  enabled: false
+  cert_file: ""
+  key_file: ""
+
+# 健康检查配置
+health:
+  # 健康检查使用的查询语句
+  sample_query: "node_os_info"
+  # 健康检查的时间范围（取消无效）
+  sample_time_range: 1m
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  # 日志格式: standard (默认带时间戳), json
+  format: "standard"
